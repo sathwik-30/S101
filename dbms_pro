@@ -1,0 +1,384 @@
+-- LittleLemon_Schema.sql
+-- Creates database, tables, sample data, and required stored procedures.
+
+DROP DATABASE IF EXISTS LittleLemonDB;
+CREATE DATABASE LittleLemonDB;
+USE LittleLemonDB;
+
+-- Customers
+CREATE TABLE Customers (
+    CustomerID INT AUTO_INCREMENT PRIMARY KEY,
+    FullName VARCHAR(100) NOT NULL,
+    PhoneNumber VARCHAR(20),
+    Email VARCHAR(150),
+    CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Staff
+CREATE TABLE Staff (
+    StaffID INT AUTO_INCREMENT PRIMARY KEY,
+    Name VARCHAR(100) NOT NULL,
+    Role VARCHAR(50),
+    CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- MenuItems
+CREATE TABLE MenuItems (
+    ItemID INT AUTO_INCREMENT PRIMARY KEY,
+    ItemName VARCHAR(150) NOT NULL,
+    Price DECIMAL(10,2) DEFAULT 0.00,
+    Quantity INT DEFAULT 0,
+    CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Bookings
+CREATE TABLE Bookings (
+    BookingID INT AUTO_INCREMENT PRIMARY KEY,
+    BookingDate DATETIME NOT NULL,
+    TableNo INT,
+    CustomerID INT,
+    StaffID INT,
+    PartySize INT DEFAULT 1,
+    Status ENUM('CONFIRMED','CANCELLED','PENDING') DEFAULT 'PENDING',
+    Notes TEXT,
+    CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (CustomerID) REFERENCES Customers(CustomerID),
+    FOREIGN KEY (StaffID) REFERENCES Staff(StaffID)
+);
+
+-- BookingItems (optional: for menu items attached to a booking)
+CREATE TABLE BookingItems (
+    BookingItemID INT AUTO_INCREMENT PRIMARY KEY,
+    BookingID INT,
+    ItemID INT,
+    Quantity INT DEFAULT 1,
+    Price DECIMAL(10,2),
+    FOREIGN KEY (BookingID) REFERENCES Bookings(BookingID) ON DELETE CASCADE,
+    FOREIGN KEY (ItemID) REFERENCES MenuItems(ItemID)
+);
+
+-- Sample data for testing
+INSERT INTO Customers (FullName, PhoneNumber, Email) VALUES
+('Asha Reddy', '9876543210', 'asha@example.com'),
+('Rahul Kumar', '9123456780', 'rahul@example.com'),
+('Meera Patel', '9001122334', 'meera@example.com');
+
+INSERT INTO Staff (Name, Role) VALUES
+('Ravi', 'Manager'),
+('Sonia', 'Hostess'),
+('Arjun', 'Waiter');
+
+INSERT INTO MenuItems (ItemName, Price, Quantity) VALUES
+('Margherita Pizza', 8.50, 20),
+('Pasta Arrabiata', 7.00, 15),
+('Lemon Tart', 4.25, 10);
+
+INSERT INTO Bookings (BookingDate, TableNo, CustomerID, StaffID, PartySize, Status, Notes) VALUES
+('2025-11-10 19:00:00', 5, 1, 2, 3, 'CONFIRMED', 'Birthday'),
+('2025-11-11 13:00:00', 2, 2, 3, 2, 'PENDING', ''),
+('2025-11-12 20:30:00', 8, 3, 1, 4, 'CONFIRMED', 'Window seat');
+
+INSERT INTO BookingItems (BookingID, ItemID, Quantity, Price) VALUES
+(1, 1, 2, 8.50),
+(1, 3, 3, 4.25),
+(3, 2, 1, 7.00);
+
+-- Stored procedures required by rubric:
+
+DELIMITER //
+
+-- 1) GetMaxQuantity
+CREATE PROCEDURE GetMaxQuantity()
+BEGIN
+    SELECT MAX(Quantity) AS MaxQuantity FROM MenuItems;
+END //
+
+-- 2) AddBooking
+-- Inserts a booking and returns new booking id as a result set
+CREATE PROCEDURE AddBooking(
+    IN p_booking_date DATETIME,
+    IN p_table_no INT,
+    IN p_customer_id INT,
+    IN p_staff_id INT,
+    IN p_party_size INT,
+    IN p_notes TEXT
+)
+BEGIN
+    INSERT INTO Bookings(BookingDate, TableNo, CustomerID, StaffID, PartySize, Notes, Status)
+    VALUES (p_booking_date, p_table_no, p_customer_id, p_staff_id, p_party_size, p_notes, 'CONFIRMED');
+    SELECT LAST_INSERT_ID() AS NewBookingID;
+END //
+
+-- 3) UpdateBooking
+CREATE PROCEDURE UpdateBooking(
+    IN p_booking_id INT,
+    IN p_booking_date DATETIME,
+    IN p_table_no INT,
+    IN p_party_size INT,
+    IN p_status VARCHAR(20),
+    IN p_notes TEXT
+)
+BEGIN
+    UPDATE Bookings
+    SET BookingDate = p_booking_date,
+        TableNo = p_table_no,
+        PartySize = p_party_size,
+        Status = p_status,
+        Notes = p_notes
+    WHERE BookingID = p_booking_id;
+    SELECT ROW_COUNT() AS RowsAffected;
+END //
+
+-- 4) CancelBooking
+CREATE PROCEDURE CancelBooking(IN p_booking_id INT)
+BEGIN
+    UPDATE Bookings
+    SET Status = 'CANCELLED'
+    WHERE BookingID = p_booking_id;
+    SELECT ROW_COUNT() AS RowsAffected;
+END //
+
+-- 5) ManageBooking
+CREATE PROCEDURE ManageBooking()
+BEGIN
+    SELECT b.BookingID, b.BookingDate, b.TableNo, c.FullName AS CustomerName, s.Name AS StaffName,
+           b.PartySize, b.Status, b.Notes, b.CreatedAt
+    FROM Bookings b
+    LEFT JOIN Customers c ON b.CustomerID = c.CustomerID
+    LEFT JOIN Staff s ON b.StaffID = s.StaffID
+    ORDER BY b.BookingDate DESC;
+END //
+
+DELIMITER ;
+
+
+# booking_app.py
+"""
+Simple Python client for LittleLemonDB.
+Requires: pip install mysql-connector-python
+"""
+
+import mysql.connector
+from mysql.connector import Error
+from datetime import datetime
+
+DB_CONFIG = {
+    'host': 'localhost',
+    'user': 'root',
+    'password': 'yourpassword',   # <-- change before commit or use env var
+    'database': 'LittleLemonDB'
+}
+
+def get_connection():
+    return mysql.connector.connect(**DB_CONFIG)
+
+def call_get_max_quantity():
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.callproc('GetMaxQuantity')
+        # fetch results from stored_results
+        for res in cur.stored_results():
+            print("Max Quantity:", res.fetchall())
+    finally:
+        cur.close()
+        conn.close()
+
+def call_manage_booking():
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.callproc('ManageBooking')
+        for res in cur.stored_results():
+            columns = [d[0] for d in res.description]
+            rows = res.fetchall()
+            print(columns)
+            for r in rows:
+                print(r)
+    finally:
+        cur.close()
+        conn.close()
+
+def call_add_booking(booking_date, table_no, customer_id, staff_id, party_size=1, notes=''):
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        args = (booking_date, table_no, customer_id, staff_id, party_size, notes)
+        cur.callproc('AddBooking', args)
+        for res in cur.stored_results():
+            new_id = res.fetchone()
+            print("New booking id:", new_id)
+            return new_id[0] if new_id else None
+    finally:
+        conn.commit()
+        cur.close()
+        conn.close()
+
+def call_update_booking(booking_id, booking_date, table_no, party_size, status='CONFIRMED', notes=''):
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        args = (booking_id, booking_date, table_no, party_size, status, notes)
+        cur.callproc('UpdateBooking', args)
+        for res in cur.stored_results():
+            print("Rows affected:", res.fetchall())
+    finally:
+        conn.commit()
+        cur.close()
+        conn.close()
+
+def call_cancel_booking(booking_id):
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.callproc('CancelBooking', (booking_id,))
+        for res in cur.stored_results():
+            print("Rows affected (cancel):", res.fetchall())
+    finally:
+        conn.commit()
+        cur.close()
+        conn.close()
+
+if __name__ == '__main__':
+    # small demo: don't run automatically in production; just useful for testing
+    print("=== Little Lemon Booking App Demo ===")
+    call_get_max_quantity()
+    print("\n-- Current bookings --")
+    call_manage_booking()
+
+    # Add a new booking (example)
+    dt = datetime(2025, 11, 20, 18, 30)  # change as needed
+    new_id = call_add_booking(dt, 3, 1, 2, 4, 'Table by window please')
+    print("Added booking id:", new_id)
+
+    # Update booking example
+    if new_id:
+        new_dt = datetime(2025, 11, 20, 19, 30)
+        call_update_booking(new_id, new_dt, 3, 4, 'CONFIRMED', 'Changed time to 19:30')
+
+    # Cancel booking example
+    # call_cancel_booking(new_id)
+
+
+# watcher.py
+"""
+Simple watcher that polls the Bookings table for new CONFIRMED bookings and runs a handler.
+Run this script while testing to "react" to new bookings.
+"""
+
+import time
+import json
+import os
+from datetime import datetime
+import mysql.connector
+
+DB_CONFIG = {
+    'host': 'localhost',
+    'user': 'root',
+    'password': 'yourpassword',
+    'database': 'LittleLemonDB'
+}
+
+STATE_FILE = 'watcher_state.json'
+POLL_INTERVAL = 6  # seconds
+
+def load_state():
+    if os.path.exists(STATE_FILE):
+        with open(STATE_FILE, 'r') as f:
+            return json.load(f)
+    return {'last_seen_id': 0}
+
+def save_state(state):
+    with open(STATE_FILE, 'w') as f:
+        json.dump(state, f)
+
+def fetch_new_bookings(last_seen_id):
+    conn = mysql.connector.connect(**DB_CONFIG)
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT BookingID, BookingDate, TableNo, CustomerID, PartySize, Status, Notes
+            FROM Bookings
+            WHERE BookingID > %s
+            ORDER BY BookingID ASC
+        """, (last_seen_id,))
+        return cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+def handle_booking(b):
+    # Example reaction: print and maybe call another API, send email, etc.
+    print("=== New booking detected ===")
+    print(f"ID: {b['BookingID']}, Date: {b['BookingDate']}, Table: {b['TableNo']}, PartySize: {b['PartySize']}, Status: {b['Status']}")
+    # Add custom reaction here (call stored proc, notify staff, update another table)
+    # Example: if status is PENDING, set to CONFIRMED automatically (demo)
+    if b['Status'] == 'PENDING':
+        conn = mysql.connector.connect(**DB_CONFIG)
+        cur = conn.cursor()
+        try:
+            cur.execute("UPDATE Bookings SET Status='CONFIRMED' WHERE BookingID=%s", (b['BookingID'],))
+            conn.commit()
+            print("Auto-confirmed booking", b['BookingID'])
+        finally:
+            cur.close()
+            conn.close()
+
+def main_loop():
+    state = load_state()
+    last_seen = state.get('last_seen_id', 0)
+    print("Starting watcher. Last seen id:", last_seen)
+    try:
+        while True:
+            new_rows = fetch_new_bookings(last_seen)
+            for row in new_rows:
+                handle_booking(row)
+                last_seen = max(last_seen, row['BookingID'])
+            state['last_seen_id'] = last_seen
+            save_state(state)
+            time.sleep(POLL_INTERVAL)
+    except KeyboardInterrupt:
+        print("Watcher stopped by user.")
+        save_state({'last_seen_id': last_seen})
+
+if __name__ == '__main__':
+    main_loop()
+
+
+
+# Little Lemon — Booking Management System
+
+## Overview
+This repo contains a MySQL schema, stored procedures, Python client examples and a simple watcher to demonstrate a full booking system flow for Little Lemon.
+
+## Files
+- `LittleLemon_Schema.sql`  — database, tables, sample data, and stored procedures
+- `booking_app.py`          — Python client that calls stored procedures
+- `watcher.py`              — simple poller that reacts to new bookings
+- `ER_Diagram.png`          — (placeholder) put your ER diagram here
+- `Screenshots/`            — put required screenshots for submission here
+
+## How to run
+1. Create DB:
+   - Import `LittleLemon_Schema.sql` into MySQL Workbench or run via MySQL CLI.
+2. Python:
+   - `pip install mysql-connector-python`
+   - Edit DB credentials in `booking_app.py` and `watcher.py` or set environment variables.
+   - Run `python booking_app.py` to test procedures.
+   - Run `python watcher.py` to run the simple data-change watcher.
+3. Tableau:
+   - Connect Tableau to the `LittleLemonDB` MySQL database.
+   - Build dashboards (Total bookings, Bookings by date, Menu popularity, Revenue).
+
+## Rubric mapping
+- ER Diagram: include `ER_Diagram.png`
+- SQL Schema: `LittleLemon_Schema.sql`
+- Procedures: implemented (`GetMaxQuantity`, `AddBooking`, `UpdateBooking`, `CancelBooking`, `ManageBooking`)
+- Python client: `booking_app.py`
+- React-to-change example: `watcher.py`
+
+## Notes
+- Replace the DB password in scripts before use or configure with environment variables for security.
+- Expand the schema and add constraints/indexes as required by performance or business rules.
+
+
