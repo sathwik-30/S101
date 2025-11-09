@@ -1,0 +1,236 @@
+import React, { useState } from "react";
+import "./App.css";
+
+function App() {
+  return (
+    <div className="App">
+      <Header />
+      <main>
+        <h1>Reserve a Table at Little Lemon 🍋</h1>
+        <BookingForm />
+      </main>
+      <Footer />
+    </div>
+  );
+}
+
+function Header() {
+  return (
+    <header className="header">
+      <nav className="navbar">
+        <h2 className="logo">Little Lemon</h2>
+        <ul className="nav-links">
+          <li><a href="#home">Home</a></li>
+          <li><a href="#menu">Menu</a></li>
+          <li><a href="#book">Book Table</a></li>
+          <li><a href="#contact">Contact</a></li>
+        </ul>
+      </nav>
+    </header>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="footer">
+      <p>&copy; 2025 Little Lemon. All rights reserved.</p>
+    </footer>
+  );
+}
+
+function BookingForm() {
+  const [formData, setFormData] = useState({
+    date: "",
+    time: "",
+    diners: "",
+    name: "",
+    contact: "",
+  });
+
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const { date, time, diners, name, contact } = formData;
+    if (!date || !time || !diners || !name || !contact) {
+      setError("Please fill in all fields before submitting.");
+      return;
+    }
+    setError("");
+    setSubmitted(true);
+  };
+
+  if (submitted) return <ConfirmedBooking data={formData} />;
+
+  return (
+    <form onSubmit={handleSubmit} aria-label="Booking Form" className="form-container">
+      <label htmlFor="date">Select Date:</label>
+      <input
+        type="date"
+        id="date"
+        name="date"
+        value={formData.date}
+        onChange={handleChange}
+        required
+      />
+
+      <label htmlFor="time">Select Time:</label>
+      <input
+        type="time"
+        id="time"
+        name="time"
+        value={formData.time}
+        onChange={handleChange}
+        required
+      />
+
+      <label htmlFor="diners">Number of Diners:</label>
+      <input
+        type="number"
+        id="diners"
+        name="diners"
+        min="1"
+        max="10"
+        value={formData.diners}
+        onChange={handleChange}
+        required
+      />
+
+      <label htmlFor="name">Full Name:</label>
+      <input
+        type="text"
+        id="name"
+        name="name"
+        placeholder="Your Name"
+        value={formData.name}
+        onChange={handleChange}
+        required
+      />
+
+      <label htmlFor="contact">Contact Info:</label>
+      <input
+        type="text"
+        id="contact"
+        name="contact"
+        placeholder="Email or Phone"
+        value={formData.contact}
+        onChange={handleChange}
+        required
+      />
+
+      {error && <p style={{ color: "red" }}>{error}</p>}
+
+      <button type="submit" className="submit-btn">
+        Book Table
+      </button>
+    </form>
+  );
+}
+
+function ConfirmedBooking({ data }) {
+  return (
+    <div className="confirmation">
+      <h2>Booking Confirmed ✅</h2>
+      <p>
+        Thank you, {data.name}! Your table for {data.diners} on {data.date} at {data.time} has
+        been reserved.
+      </p>
+      <p>We’ll contact you at: {data.contact}</p>
+    </div>
+  );
+}
+
+export default App;
+
+/* ----------------------------- App.css ----------------------------- */
+
+.App {
+  text-align: center;
+  font-family: Arial, sans-serif;
+  background-color: #fffef7;
+  color: #333;
+  padding: 20px;
+}
+
+.header {
+  background-color: #f4ce14;
+  padding: 15px;
+}
+
+.logo {
+  margin: 0;
+}
+
+.navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.nav-links {
+  list-style: none;
+  display: flex;
+  gap: 20px;
+  padding: 0;
+}
+
+.nav-links a {
+  text-decoration: none;
+  color: #333;
+  font-weight: bold;
+}
+
+.footer {
+  background-color: #f4ce14;
+  margin-top: 30px;
+  padding: 10px;
+}
+
+.form-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+  background: #fff;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0px 4px 10px rgba(0,0,0,0.1);
+}
+
+.form-container input {
+  width: 100%;
+  padding: 8px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+}
+
+.submit-btn {
+  background-color: #495e57;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  cursor: pointer;
+  border-radius: 5px;
+}
+
+.submit-btn:hover {
+  background-color: #3b4f49;
+}
+
+.confirmation {
+  text-align: center;
+  margin-top: 30px;
+  background-color: #e9fbe7;
+  padding: 20px;
+  border-radius: 10px;
+}
+
